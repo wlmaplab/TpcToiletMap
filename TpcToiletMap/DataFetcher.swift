@@ -13,17 +13,17 @@ struct Toilet: Identifiable {
     let id = UUID()
     let coordinate : CLLocationCoordinate2D
     let address : String
-//    let info : String
     let total : Int
     let accessible : Int
     let family : Int
 }
 
 
+@MainActor
 class DataFetcher: ObservableObject {
     
     @Published var dataArray : [Toilet]?
-    @Published var allData: [Toilet]?
+    var allData: [Toilet]?
     
     private let fetchLimit = 1000
     private var fetchOffset = 0
@@ -35,7 +35,7 @@ class DataFetcher: ObservableObject {
     
     // MARK: - Functions
     
-    func download() {
+    func download() async {
         print(">> 正在下載資料集...")
         dataArray = nil
         allData = nil
@@ -43,7 +43,7 @@ class DataFetcher: ObservableObject {
         tmpResults = Array<Dictionary<String,Any>>()
         fetchOffset = 0
         
-        downloadInfoJson()
+        await downloadInfoJson()
     }
     
     func loadData(_ value: Int) {
@@ -76,36 +76,30 @@ class DataFetcher: ObservableObject {
     
     // MARK: - Download Data
     
-    private func downloadInfoJson() {
-        httpGET_withFetchJsonObject(URLString: infoUrlString) { json in
-            if let json = json,
-               let urlStr = json["url"] as? String
-            {
-                self.datasetUrlString = urlStr
-            }
-            self.downloadData()
+    private func downloadInfoJson() async {
+        if let json = try? await httpGET_withFetchJsonObject(URLString: infoUrlString),
+           let urlStr = json["url"] as? String
+        {
+            datasetUrlString = urlStr
+            await downloadData()
         }
     }
     
     
-    private func downloadData() {
-        fetch(limit: fetchLimit, offset: fetchOffset) { json in
-            var resultsCount = 0
-            if let json = json,
-               let result = json["result"] as? Dictionary<String,Any>,
-               let results = result["results"] as? Array<Dictionary<String,Any>>
-            {
-                self.tmpResults?.append(contentsOf: results)
-                resultsCount = results.count
-            }
+    private func downloadData() async {
+        var resultsCount = 0
+        if let json = try? await fetch(limit: fetchLimit, offset: fetchOffset),
+           let result = json["result"] as? Dictionary<String,Any>,
+           let results = result["results"] as? Array<Dictionary<String,Any>>
+        {
+            tmpResults?.append(contentsOf: results)
+            resultsCount = results.count
             
-            if resultsCount >= self.fetchLimit {
-                self.fetchOffset += self.fetchLimit
-                self.downloadData()
+            if resultsCount >= fetchLimit {
+                fetchOffset += fetchLimit
+                await downloadData()
             } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.convertResultsToDataArray()
-                }
+                convertResultsToDataArray()
             }
         }
     }
@@ -114,7 +108,6 @@ class DataFetcher: ObservableObject {
         guard let results = tmpResults else { return }
         
         var tmpArray = [Toilet]()
-        
         for info in results {
             if let item = createToiletItem(info) {
                 tmpArray.append(item)
@@ -146,19 +139,37 @@ class DataFetcher: ObservableObject {
     
     // MARK: - Fetch Data
     
-    private func fetch(limit: Int, offset: Int, callback: @escaping (Dictionary<String,Any>?) -> Void) {
-        httpGET_withFetchJsonObject(URLString: "\(datasetUrlString)&limit=\(limit)&offset=\(offset)", callback: callback)
+    private func fetch(limit: Int, offset: Int) async throws -> [String: Any]? {
+        let json = try await httpGET_withFetchJsonObject(URLString: "\(datasetUrlString)&limit=\(limit)&offset=\(offset)")
+        return json
     }
     
     
     // MARK: - HTTP GET
     
-    private func httpGET_withFetchJsonObject(URLString: String, callback: @escaping (Dictionary<String,Any>?) -> Void) {
-        httpRequestWithFetchJsonObject(httpMethod: "GET", URLString: URLString, parameters: nil, callback: callback)
+    private func httpGET_withFetchJsonObject(URLString: String) async throws -> [String: Any]? {
+        let json = try await httpRequestWithFetchJsonObject(httpMethod: "GET", URLString: URLString, parameters: nil)
+        return json
     }
     
     
     // MARK: - HTTP Request with Method
+    
+    private func httpRequestWithFetchJsonObject(httpMethod: String,
+                                                URLString: String,
+                                                parameters: Dictionary<String,Any>?) async throws -> [String: Any]?
+    {
+        try await withCheckedThrowingContinuation { continuation in
+            httpRequestWithFetchJsonObject(httpMethod: "GET", URLString: URLString, parameters: nil) { json in
+                if let json = json {
+                    continuation.resume(returning: json)
+                } else {
+                    let error = NSError(domain: "tw.wclingdev.iapp.tptoiletmap", code: 400)
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
     
     private func httpRequestWithFetchJsonObject(httpMethod: String,
                                                 URLString: String,
