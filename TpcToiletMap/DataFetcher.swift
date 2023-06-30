@@ -128,7 +128,7 @@ class DataFetcher: ObservableObject {
         if let lat = latitude, let lng = longitude {
             let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
             let address = "◎ 名稱：\(info["公廁名稱"] ?? "")\n◎ 地址：\(info["公廁地址"] ?? "")"
-            let total = Int(info["總座數"] as? String ?? "") ?? 0
+            let total = Int(info["座數"] as? String ?? "") ?? 0
             let accessible = Int(info["無障礙廁座數"] as? String ?? "") ?? 0
             let family = Int(info["親子廁座數"] as? String ?? "") ?? 0
             return Toilet(coordinate: coordinate, address: address, total: total, accessible: accessible, family: family)

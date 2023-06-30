@@ -112,7 +112,7 @@ class ToiletMapView: MKMapView, MKMapViewDelegate {
         
         var pins = [MapPin]()
         for item in array {
-            let info = "◎ 總座數：\(item.total)\n◎ 親子廁座數：\(item.family)\n◎ 無障礙廁座數：\(item.accessible)"
+            let info = "◎ 座數：\(item.total)\n◎ 親子廁座數：\(item.family)\n◎ 無障礙廁座數：\(item.accessible)"
             let annotation = MapPin(coordinate: item.coordinate,
                                     image: UIImage(named: "ToiletPin"),
                                     address: item.address,
